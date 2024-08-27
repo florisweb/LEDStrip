@@ -32,6 +32,11 @@ void onMessage(DynamicJsonDocument message) {
   int inten = 0;
 
 
+  if (message["type"] == "playChargePhoneAnimation")
+  {
+    return chargePhoneAnimation();
+  }
+
   switch (packetType) {
     case 1: Toggle_RED_LED();
       Serial.println("1.Toggle LED Complete");
@@ -57,7 +62,6 @@ void onMessage(DynamicJsonDocument message) {
     case 8: charge_bat_test();
       Serial.println("8.charge test animation");
       break;
-
     case 9:
       r = message["data"][0];
       g = message["data"][1];
@@ -280,7 +284,7 @@ void charge_bat_test(void) {
     float val = 255 - t;
     int base = 100;
     float powPart = (pow(base, val / 255) - 1);
-    byte intensity = 255 / (1 - 1 / base) * 1/base * powPart;
+    byte intensity = 255 / (1 - 1 / base) * 1 / base * powPart;
 
     Serial.println(intensity);
     for (int i = 0; i < RGB_LED_NUM; i++) {
@@ -294,7 +298,7 @@ void charge_bat_test(void) {
     float val =  t;
     int base = 100;
     float powPart = (pow(base, val / 255) - 1);
-    byte intensity = 255 / (1 - 1 / base) * 1/base * powPart;
+    byte intensity = 255 / (1 - 1 / base) * 1 / base * powPart;
     Serial.println(intensity);
     for (int i = 0; i < RGB_LED_NUM; i++) {
       LEDs[i] = CRGB (0, intensity, 0);
@@ -303,6 +307,58 @@ void charge_bat_test(void) {
     FastLED.delay(20);
   }
 }
+
+
+
+void chargePhoneAnimation(void) {
+  for (int i = 0; i < RGB_LED_NUM; i++) {
+    LEDs[i] = CRGB (0, 0, 0);
+  }
+  FastLED.show();
+
+
+
+  for (int t = 1; t < RGB_LED_NUM / 2; t += 5)
+  {
+    float val = t * 2 * 255 / RGB_LED_NUM;
+    byte intensity = LLV(val);
+    FastLED.setBrightness(intensity);
+    for (int i = 0; i < t; i++)
+    {
+      LEDs[RGB_LED_NUM / 2 - i] = CRGB (0, 255, 0);
+      LEDs[RGB_LED_NUM / 2 + i] = CRGB (0, 255, 0);
+    }
+    FastLED.show();
+    FastLED.delay(15);
+  }
+
+  for (int t = 1; t < RGB_LED_NUM / 2; t += 5)
+  {
+    float val = 255 - t * 2 * 255 / RGB_LED_NUM;
+    byte intensity = LLV(val);
+    FastLED.setBrightness(intensity);
+    for (int i = 0; i < t; i++)
+    {
+      if (i > t - 25 || i < t - 35)
+      {
+        LEDs[RGB_LED_NUM / 2 - i] = CRGB (0, 0, 0);
+        LEDs[RGB_LED_NUM / 2 + i] = CRGB (0, 0, 0);
+      } else {
+        LEDs[RGB_LED_NUM / 2 - i] = CRGB (255, 150, 0);
+        LEDs[RGB_LED_NUM / 2 + i] = CRGB (255, 150, 0);
+      }
+    }
+    FastLED.show();
+    FastLED.delay(15);
+  }
+
+  for (int i = 0; i < RGB_LED_NUM; i++) {
+    LEDs[i] = CRGB (0, 0, 0);
+  }
+  FastLED.show();
+
+}
+
 
 
 
@@ -323,36 +379,51 @@ void charge_bat(void) {
 
 
   int wingIndex = 0;
-  for (int t = 0; t < 255; t += 5)
+  for (int t = 1; t < 255; t += 5)
   {
-    byte intensity = t;
+    byte intensity = LLV(t);
     Serial.println(intensity);
+    FastLED.setBrightness(intensity);
+    //    if (t % 5 == 1)
+    //    {
+    wingIndex++;
+    LEDs[wingSize - wingIndex] = CRGB (0, 255, 0);
+    LEDs[RGB_LED_NUM - wingSize + wingIndex] = CRGB (0, 255, 0);
+    FastLED.show();
+    //    }
+    FastLED.delay(0);
+  }
 
-    FastLED.setBrightness(t);
 
-    if (t % 5 == 0)
-    {
-      wingIndex++;
-      LEDs[wingSize - wingIndex] = CRGB (0, 255, 0);
-      LEDs[RGB_LED_NUM - wingSize + wingIndex] = CRGB (0, 255, 0);
-      FastLED.show();
+  for (int t = 0; t < 100; t++)
+  {
+    byte intensity = LLV(255 - t);
+    Serial.println(intensity);
+    FastLED.setBrightness(intensity);
+    FastLED.delay(10);
+  }
+  FastLED.setBrightness(255);
+  FastLED.delay(1000);
+
+  for (int t = 0; t < 150; t++)
+  {
+    byte intensity = LLV(255 - t);
+    Serial.println(intensity);
+    for (int i = 0; i < RGB_LED_NUM; i++) {
+      LEDs[i] = CRGB (0, intensity, 0);
     }
-    FastLED.delay(1);
+    FastLED.show();
+    FastLED.delay(3);
   }
 
+  for (int i = 0; i < RGB_LED_NUM; i++) {
+    LEDs[i] = CRGB (0, 0, 0);
+  }
+  FastLED.show();
+}
 
-  for (int t = 0; t < 100; t++)
-  {
-    byte intensity = 255 - t;
-    Serial.println(intensity);
-    FastLED.setBrightness(t);
-    FastLED.delay(50);
-  }
-  for (int t = 0; t < 100; t++)
-  {
-    byte intensity = 155 + t;
-    Serial.println(intensity);
-    FastLED.setBrightness(t);
-    FastLED.delay(50);
-  }
+float LLV(float val) {
+  int base = 100;
+  float powPart = (pow(base, val / 255) - 1);
+  return 255 / (1 - 1 / base) * 1 / base * powPart;
 }
