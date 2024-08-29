@@ -1,7 +1,9 @@
 #include "FastLED.h"
 #include "connectionManager.h";
 
+const int IRSensorPin = 18;
 const int signalPin = 5;
+
 #define RGB_LED_NUM  300            // 10 LEDs [0...9]
 #define BRIGHTNESS   255           // brightness range [0..255]
 #define CHIP_SET     WS2812B       // types of RGB LEDs
@@ -15,73 +17,37 @@ const char* password = "";
 const String deviceId = "LEDStrip";
 const String deviceKey = "";
 
+byte curAlarmRed, curAlarmGreen, curAlarmBlue;
+byte baseRed = 0;
+byte baseGreen = 0;
+byte baseBlue = 0;
+
 connectionManager ConnectionManager;
 
 void onMessage(DynamicJsonDocument message) {
   String error = message["error"];
-  int packetType = message["type"];
+  String packetType = message["type"];
 
   Serial.print("[OnMessage] Error: ");
   Serial.println(error);
   Serial.print("[OnMessage] type: ");
   Serial.println(packetType);
 
-  int r = 0;
-  int g = 0;
-  int b = 0;
-  int inten = 0;
-
-
-  if (message["type"] == "playChargePhoneAnimation")
+  if (packetType == "playChargePhoneAnimation")
   {
-    return chargePhoneAnimation();
-  }
-
-  switch (packetType) {
-    case 1: Toggle_RED_LED();
-      Serial.println("1.Toggle LED Complete");
-      break;
-    case 2: Scrolling_RED_LED();
-      Serial.println("2.Scrolling RED LED Complete");
-      break;
-    case 3: O_W_G_scroll();
-      Serial.println("3.Flag Show Complete");
-      break;
-    case 4:  Rotate_color();
-      Serial.println("4.Rotate color Complete");
-      break;
-    case 5: r_g_b();
-      Serial.println("5.R_G_B color Complete");
-      break;
-    case 6: random_color();
-      Serial.println("6.Random color Show Complete");
-      break;
-    case 7: charge_bat();
-      Serial.println("7.charge animation");
-      break;
-    case 8: charge_bat_test();
-      Serial.println("8.charge test animation");
-      break;
-    case 9:
-      r = message["data"][0];
-      g = message["data"][1];
-      b = message["data"][2];
-      inten = message["data"][3];
-      Serial.println( r);
-      Serial.println( g);
-      Serial.println( b);
-      Serial.println( inten);
-
-      FastLED.setBrightness( inten);
-      for (int i = 0; i < RGB_LED_NUM; i++) {
-        LEDs[i] = CRGB ( r, g, b);
-      }
-      FastLED.show();
-      break;
-
-    default:
-      Serial.println("No animation found");
-      break;
+    return chargePhoneAnimation(message["data"]);
+  } else if (packetType == "startAlarmAnimation") {
+    curAlarmRed   = message["data"][0];
+    curAlarmGreen = message["data"][1];
+    curAlarmBlue  = message["data"][2];
+  } else if (packetType == "stopAlarm") {
+    curAlarmRed = curAlarmGreen = curAlarmBlue = 0;
+    setToBaseColor();
+  } else if (packetType == "setColor") {
+    baseRed   = message["data"][0];
+    baseGreen = message["data"][1];
+    baseBlue  = message["data"][2];
+    setToBaseColor();
   }
 }
 
@@ -96,225 +62,145 @@ void setup() {
   FastLED.clear();
   FastLED.show();
 
+  pinMode(IRSensorPin, INPUT);
+
   Serial.println("Setting up WiFi...");
+
+  ConnectionManager.defineEventDocs("["
+                                    "{"
+                                    "\"type\": \"IRSensorEvent\","
+                                    "\"data\": \"bool\","
+                                    "\"description\": \"True on person detect, false on no-person detect\""
+                                    "}"
+                                    "]");
+  ConnectionManager.defineAccessPointDocs("["
+                                          "{"
+                                          "\"type\": \"playChargePhoneAnimation\","
+                                          "\"description\": \"Shows the charge-animation.\""
+                                          "},"
+                                          "{"
+                                          "\"type\": \"startAlarmAnimation\","
+                                          "\"data\": \"[r, g, b]\","
+                                          "\"description\": \"Shows a pulsating animation with the color as specified in data.\""
+                                          "},"
+                                          "{"
+                                          "\"type\": \"stopAlarm\","
+                                          "\"description\": \"Stops the animation from startAlarmAnimation.\""
+                                          "},"
+                                          "{"
+                                          "\"type\": \"setColor\","
+                                          "\"data\": \"[r, g, b]\","
+                                          "\"description\": \"Sets the homogenious color of the LEDS.\""
+                                          "}"
+                                          "]");
+
+
   ConnectionManager.setup(ssid, password, deviceId, deviceKey, &onMessage);
 }
 
 
-void sendData() {
-  String dataString = "{\"type\": \"sensorState\", \"data\": []}";
-  ConnectionManager.send(dataString);
-}
 
+unsigned int prevMillis = 0;
+bool IRSensorState = false;
+bool curIRSensorState = false;
 void loop() {
   ConnectionManager.loop();
-}
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-// RED LED TOGGLE
-void Toggle_RED_LED(void) {
-  // Red Green Blue
-  for (int i = 0; i < RGB_LED_NUM; i++)
-    LEDs[i] = CRGB(255, 0, 0 );
-  FastLED.show();
-  delay(1000);
-  for (int i = 0; i < RGB_LED_NUM; i++)
-    LEDs[i] = CRGB(0, 0, 0 );
-  FastLED.show();
-  delay(1000);
-}
-
-// Move the Red LED
-void Scrolling_RED_LED(void)
-{
-  for (int i = 0; i < RGB_LED_NUM; i++) {
-    LEDs[i] = CRGB::Red;
-    FastLED.show();
-    delay(500);
-    LEDs[i] = CRGB::Black;
-    FastLED.show();
-    delay(500);
-  }
-}
-
-// Orange/White/Green color green
-void O_W_G_scroll() {
-  for (int i = 0; i < RGB_LED_NUM; i++) {
-    LEDs[i] = CRGB::Orange;
-    delay(20);
-    FastLED.show();
-  }
-  for (int i = 0; i < RGB_LED_NUM; i++) {
-    LEDs[i] = CRGB::Black;
-    delay(20);
-    FastLED.show();
-  }
-  for (int i = 0; i < RGB_LED_NUM; i++) {
-    LEDs[i] = CRGB::White;
-    delay(20);
-    FastLED.show();
-  }
-  for (int i = 0; i < RGB_LED_NUM; i++) {
-    LEDs[i] = CRGB::Black;
-    delay(20);
-    FastLED.show();
-  }
-  for (int i = 0; i < RGB_LED_NUM; i++) {
-    LEDs[i] = CRGB::Green;
-    delay(20);
-    FastLED.show();
-  }
-  for (int i = 0; i < RGB_LED_NUM; i++) {
-    LEDs[i] = CRGB::Black;
-    delay(20);
-    FastLED.show();
-  }
-}
-
-// Red/Green/Blue color Rotate
-void Rotate_color(void) {
-  for (int clr = 0; clr < RGB_LED_NUM; clr++) {
-    LEDs[clr]     = CRGB::Red;
-    LEDs[clr + 1] = CRGB::Green;
-    LEDs[clr + 2] = CRGB::Blue;
-    FastLED.show();
-    delay(100);
-    for (int clr = 0; clr < RGB_LED_NUM; clr++) {
-      LEDs[clr] = CRGB::Black;
-      delay(5);
-    }
-  }
-}
-
-// Blue, Green , Red
-void r_g_b() {
-  for (int i = 0; i < RGB_LED_NUM; i++) {
-    LEDs[i] = CRGB ( 0, 0, 255);
-    FastLED.show();
-    delay(50);
-  }
-  for (int i = RGB_LED_NUM; i >= 0; i--) {
-    LEDs[i] = CRGB ( 0, 255, 0);
-    FastLED.show();
-    delay(50);
-  }
-  for (int i = 0; i < RGB_LED_NUM; i++) {
-    LEDs[i] = CRGB ( 255, 0, 0);
-    FastLED.show();
-    delay(50);
-  }
-  for (int i = RGB_LED_NUM; i >= 0; i--) {
-    LEDs[i] = CRGB ( 0, 0, 0);
-    FastLED.show();
-    delay(50);
-  }
-}
-
-byte  a, b, c;
-// random color show
-void random_color(void) {
-  // loop over the NUM_LEDS
-  for (int i = 0; i < RGB_LED_NUM; i++) {
-    // choose random value for the r/g/b
-    a = random(0, 255);
-    b = random(0, 255);
-    c = random(0, 255);
-    // Set the value to the led
-    LEDs[i] = CRGB (a, b, c);
-    // set the colors set into the physical LED
-    FastLED.show();
-
-    // delay 50 millis
-    FastLED.delay(200);
-  }
-}
-
-
-
-
-
-
-
-
-
-
-
-void charge_bat_test(void) {
-  FastLED.setBrightness(255);
-  //
-  //  for (int t = 0; t < 255; t++)
-  //  {
-  //    byte intensity = 255 - t;
-  //    Serial.println(intensity);
-  //    for (int i = 0; i < RGB_LED_NUM; i++) {
-  //      LEDs[i] = CRGB (0, t, 0);
-  //    }
-  //    FastLED.show();
-  //    FastLED.delay(100);
-  //  }
-  //  for (int t = 0; t < 255; t++)
-  //  {
-  //    byte intensity = t;
-  //    Serial.println(intensity);
-  //    for (int i = 0; i < RGB_LED_NUM; i++) {
-  //      LEDs[i] = CRGB (0, t, 0);
-  //    }
-  //    FastLED.show();
-  //    FastLED.delay(100);
-  //  }
-
-  FastLED.delay(2000);
-  for (int t = 0; t < 255; t += 1)
+  if (millis() - prevMillis > 60000 / 30 && curAlarmRed + curAlarmGreen + curAlarmBlue > 0)
   {
-    float val = 255 - t;
-    int base = 100;
-    float powPart = (pow(base, val / 255) - 1);
-    byte intensity = 255 / (1 - 1 / base) * 1 / base * powPart;
-
-    Serial.println(intensity);
-    for (int i = 0; i < RGB_LED_NUM; i++) {
-      LEDs[i] = CRGB (0, intensity, 0);
-    }
-    FastLED.show();
-    FastLED.delay(20);
+    prevMillis = millis();
+    heartBeat(curAlarmRed, curAlarmGreen, curAlarmBlue);
   }
-  for (int t = 0; t < 255; t += 1)
+
+  // IR-Sensor
+  IRSensorState = digitalRead(IRSensorPin);
+  if (IRSensorState != curIRSensorState)
   {
-    float val =  t;
-    int base = 100;
-    float powPart = (pow(base, val / 255) - 1);
-    byte intensity = 255 / (1 - 1 / base) * 1 / base * powPart;
-    Serial.println(intensity);
-    for (int i = 0; i < RGB_LED_NUM; i++) {
-      LEDs[i] = CRGB (0, intensity, 0);
+    if (IRSensorState) { // On-enter
+      String dataString = "{\"type\": \"IRSensorEvent\", \"data\": true}";
+      ConnectionManager.send(dataString);
+      Serial.println("Enter");
+    } else { // On-leave
+      String dataString = "{\"type\": \"IRSensorEvent\", \"data\": false}";
+      ConnectionManager.send(dataString);
+      Serial.println("Leave");
+    }
+  }
+  curIRSensorState = IRSensorState;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+void heartBeat(byte r, byte g, byte b) {
+  //  int batchSize = 15;
+  //  float delaySize = _duration * batchSize / RGB_LED_NUM;
+  //  for (int i = 0; i < RGB_LED_NUM; i++) {
+  //    LEDs[i] = CRGB (0, 0, 0);
+  //  }
+  int batchSize = 5;
+  float delaySize = 3;
+  FastLED.show();
+
+  for (int t = 1; t < RGB_LED_NUM / 2; t += batchSize)
+  {
+    float val = t * 2 * 255 / RGB_LED_NUM;
+    byte intensity = LLV(val);
+    FastLED.setBrightness(intensity);
+    for (int i = 0; i < t; i++)
+    {
+      LEDs[RGB_LED_NUM / 2 - i] = CRGB (r, g, b);
+      LEDs[RGB_LED_NUM / 2 + i] = CRGB (r, g, b);
     }
     FastLED.show();
-    FastLED.delay(20);
+    FastLED.delay(delaySize);
+  }
+
+  for (int t = 1; t < RGB_LED_NUM / 2; t += batchSize)
+  {
+    float val = 255 - t * 2 * 255 / RGB_LED_NUM;
+    byte intensity = LLV(val);
+    FastLED.setBrightness(intensity);
+    for (int i = 0; i < t; i++)
+    {
+      LEDs[RGB_LED_NUM / 2 - i] = CRGB (0, 0, 0);
+      LEDs[RGB_LED_NUM / 2 + i] = CRGB (0, 0, 0);
+    }
+    FastLED.show();
+    FastLED.delay(delaySize);
   }
 }
 
 
 
-void chargePhoneAnimation(void) {
+
+
+
+
+
+
+
+void chargePhoneAnimation(int batPercentage) {
   for (int i = 0; i < RGB_LED_NUM; i++) {
     LEDs[i] = CRGB (0, 0, 0);
   }
   FastLED.show();
+
+  byte gVal = 2.55 * batPercentage;
+  byte rVal = 255 - 2.55 * batPercentage;
+  Serial.print("Green");
+  Serial.println(gVal);
 
 
 
@@ -325,8 +211,8 @@ void chargePhoneAnimation(void) {
     FastLED.setBrightness(intensity);
     for (int i = 0; i < t; i++)
     {
-      LEDs[RGB_LED_NUM / 2 - i] = CRGB (0, 255, 0);
-      LEDs[RGB_LED_NUM / 2 + i] = CRGB (0, 255, 0);
+      LEDs[RGB_LED_NUM / 2 - i] = CRGB (rVal, gVal, 0);
+      LEDs[RGB_LED_NUM / 2 + i] = CRGB (rVal, gVal, 0);
     }
     FastLED.show();
     FastLED.delay(15);
@@ -352,77 +238,22 @@ void chargePhoneAnimation(void) {
     FastLED.delay(15);
   }
 
-  for (int i = 0; i < RGB_LED_NUM; i++) {
-    LEDs[i] = CRGB (0, 0, 0);
-  }
-  FastLED.show();
-
+  setToBaseColor();
 }
 
 
-
-
-
-void charge_bat(void) {
-  for (int i = 0; i < RGB_LED_NUM; i++) {
-    LEDs[i] = CRGB (0, 0, 0);
-  }
-  FastLED.show();
-
-  const int wingSize = 50;
-  for (int i = wingSize; i < RGB_LED_NUM - wingSize; i++) {
-    LEDs[i] = CRGB (0, 255, 0);
-  }
-  FastLED.show();
-
-
-
-
-  int wingIndex = 0;
-  for (int t = 1; t < 255; t += 5)
-  {
-    byte intensity = LLV(t);
-    Serial.println(intensity);
-    FastLED.setBrightness(intensity);
-    //    if (t % 5 == 1)
-    //    {
-    wingIndex++;
-    LEDs[wingSize - wingIndex] = CRGB (0, 255, 0);
-    LEDs[RGB_LED_NUM - wingSize + wingIndex] = CRGB (0, 255, 0);
-    FastLED.show();
-    //    }
-    FastLED.delay(0);
-  }
-
-
-  for (int t = 0; t < 100; t++)
-  {
-    byte intensity = LLV(255 - t);
-    Serial.println(intensity);
-    FastLED.setBrightness(intensity);
-    FastLED.delay(10);
-  }
+void setToBaseColor() {
   FastLED.setBrightness(255);
-  FastLED.delay(1000);
-
-  for (int t = 0; t < 150; t++)
-  {
-    byte intensity = LLV(255 - t);
-    Serial.println(intensity);
-    for (int i = 0; i < RGB_LED_NUM; i++) {
-      LEDs[i] = CRGB (0, intensity, 0);
-    }
-    FastLED.show();
-    FastLED.delay(3);
-  }
-
   for (int i = 0; i < RGB_LED_NUM; i++) {
-    LEDs[i] = CRGB (0, 0, 0);
+    LEDs[i] = CRGB ( baseRed, baseGreen, baseBlue);
   }
   FastLED.show();
 }
 
-float LLV(float val) {
+
+
+
+float LLV(float val) { // Linearize Light Value
   int base = 100;
   float powPart = (pow(base, val / 255) - 1);
   return 255 / (1 - 1 / base) * 1 / base * powPart;

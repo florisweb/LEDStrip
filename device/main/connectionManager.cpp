@@ -12,24 +12,39 @@ String deviceId;
 String deviceKey;
 bool authenticated = false;
 String jsonString;
-unsigned long lastHeartBeat = 0;
 
+
+unsigned long lastHeartBeat = 0;
 void (*onMessagePointer)(DynamicJsonDocument message);
 
 
 
-void hexdump(const void *mem, uint32_t len, uint8_t cols = 16) {
-  const uint8_t* src = (const uint8_t*) mem;
-  Serial.printf("\n[HEXDUMP] Address: 0x%08X len: 0x%X (%d)", (ptrdiff_t)src, len, len);
-  for (uint32_t i = 0; i < len; i++) {
-    if (i % cols == 0) {
-      Serial.printf("\n[0x%08X] 0x%08X: ", (ptrdiff_t)src, i);
-    }
-    Serial.printf("%02X ", *src);
-    src++;
-  }
-  Serial.printf("\n");
+String eventDocs = "[]";
+String accessPointDocs = "[]";
+void sendDeviceInfo() {
+  String dataString = "{\"type\": \"deviceInfo\", \"data\": {\"events\": ";
+  dataString.concat(eventDocs);
+  dataString.concat(", \"endPoints\": ");
+  dataString.concat(accessPointDocs);
+  dataString.concat(", \"connectionManagerVersion\":");
+  dataString.concat(connectionManager::version);
+  dataString.concat("}}");
+  webSocket.sendTXT(dataString);
 }
+
+
+//void hexdump(const void *mem, uint32_t len, uint8_t cols = 16) {
+//  const uint8_t* src = (const uint8_t*) mem;
+//  Serial.printf("\n[HEXDUMP] Address: 0x%08X len: 0x%X (%d)", (ptrdiff_t)src, len, len);
+//  for (uint32_t i = 0; i < len; i++) {
+//    if (i % cols == 0) {
+//      Serial.printf("\n[0x%08X] 0x%08X: ", (ptrdiff_t)src, i);
+//    }
+//    Serial.printf("%02X ", *src);
+//    src++;
+//  }
+//  Serial.printf("\n");
+//}
 
 void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
   switch (type) {
@@ -63,6 +78,9 @@ void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
         {
           lastHeartBeat = millis();
           return;
+        } else if (type == "getDeviceInfo") {
+          sendDeviceInfo();
+          return;
         }
         onMessagePointer(doc);
 
@@ -75,9 +93,10 @@ void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
         {
           Serial.println("Successfully authenticated.");
           authenticated = true;
+          sendDeviceInfo();
         }
       }
-  
+
       break;
     case WStype_BIN:
       //      hexdump(payload, length);
@@ -131,6 +150,17 @@ bool connectionManager::isConnected() {
 bool connectionManager::isAuthenticated() {
   return authenticated;
 }
+
+
+void connectionManager::defineEventDocs(String JSONString) {
+  eventDocs = JSONString;
+}
+void connectionManager::defineAccessPointDocs(String JSONString) {
+  accessPointDocs = JSONString;
+}
+
+
+
 
 long deltaHeartbeat = 0;
 void connectionManager::loop() {
