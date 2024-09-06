@@ -6,7 +6,7 @@
 class connectionManager
 {    
   public:
-    constexpr static float version = 1.1;
+    constexpr static float version = 1.2;
     
     void setup(const char* _ssid, const char* _password, const String _deviceId, const String _deviceKey, void _onMessage(DynamicJsonDocument message));
     void loop();

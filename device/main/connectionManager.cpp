@@ -21,14 +21,26 @@ void (*onMessagePointer)(DynamicJsonDocument message);
 
 String eventDocs = "[]";
 String accessPointDocs = "[]";
-void sendDeviceInfo() {
-  String dataString = "{\"type\": \"deviceInfo\", \"data\": {\"events\": ";
+void sendDeviceInfo(String _requestId = "") {
+  String dataString = "{\"type\": \"deviceInfo\",";
+  if (_requestId != "")
+  {
+    dataString.concat("\"isResponse\": true, \"requestId\": \"");
+    dataString.concat(_requestId);
+    dataString.concat("\", ");
+    dataString.concat("\"response\": {\"events\": ");
+  } else {
+    dataString.concat("\"data\": {\"events\": ");
+  }
+  
   dataString.concat(eventDocs);
   dataString.concat(", \"endPoints\": ");
   dataString.concat(accessPointDocs);
   dataString.concat(", \"connectionManagerVersion\":");
   dataString.concat(connectionManager::version);
   dataString.concat("}}");
+  
+  Serial.println(dataString);
   webSocket.sendTXT(dataString);
 }
 
@@ -79,7 +91,8 @@ void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
           lastHeartBeat = millis();
           return;
         } else if (type == "getDeviceInfo") {
-          sendDeviceInfo();
+          String requestId = doc["requestId"];
+          sendDeviceInfo(requestId);
           return;
         }
         onMessagePointer(doc);
