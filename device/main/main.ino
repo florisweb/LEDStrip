@@ -12,6 +12,11 @@ const int signalPin = 5;
 CRGB LEDs[RGB_LED_NUM];
 
 
+
+
+
+
+
 const char* ssid = "";
 const char* password = "";
 const String deviceId = "LEDStrip";
@@ -48,6 +53,22 @@ void onMessage(DynamicJsonDocument message) {
     baseGreen = message["data"][1];
     baseBlue  = message["data"][2];
     setToBaseColor();
+  } else if (packetType == "setLEDs") {
+    FastLED.setBrightness(255);
+    JsonArray LEDDataJSON = message["data"];
+
+    int curLEDData[4];
+    int curIndex = 0;
+    for (JsonVariant v : LEDDataJSON) {
+      curLEDData[curIndex % 4] = v.as<int>();
+      curIndex++;
+      if (curIndex % 4 == 0)
+      {
+        LEDs[curLEDData[0]] = CRGB (curLEDData[1], curLEDData[2], curLEDData[3]);
+      }
+    }
+
+    FastLED.show();
   }
 }
 
@@ -91,6 +112,11 @@ void setup() {
                                           "\"type\": \"setColor\","
                                           "\"data\": \"[r, g, b]\","
                                           "\"description\": \"Sets the homogenious color of the LEDS.\""
+                                          "},"
+                                          "{"
+                                          "\"type\": \"setLEDs\","
+                                          "\"data\": \"[led-index 1, r1, g1, b1...]\","
+                                          "\"description\": \"Allows for per LED color control.\""
                                           "}"
                                           "]");
 
