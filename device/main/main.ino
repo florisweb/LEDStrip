@@ -4,15 +4,12 @@
 const int IRSensorPin = 18;
 const int signalPin = 5;
 
-#define RGB_LED_NUM  300            // 10 LEDs [0...9]
-#define BRIGHTNESS   255           // brightness range [0..255]
+#define RGB_LED_NUM  300
+#define PIANO_LED_START_INDEX  222 // The index at which the strip is behind the piano
 #define CHIP_SET     WS2812B       // types of RGB LEDs
 #define COLOR_CODE   GRB           // sequence of colors in data stream
 
 CRGB LEDs[RGB_LED_NUM];
-
-
-
 
 
 
@@ -26,6 +23,10 @@ byte curAlarmRed, curAlarmGreen, curAlarmBlue;
 byte baseRed = 0;
 byte baseGreen = 0;
 byte baseBlue = 0;
+
+bool pianoConnected = false;
+
+
 
 connectionManager ConnectionManager;
 
@@ -67,8 +68,15 @@ void onMessage(DynamicJsonDocument message) {
         LEDs[curLEDData[0]] = CRGB (curLEDData[1], curLEDData[2], curLEDData[3]);
       }
     }
-
     FastLED.show();
+  } else if (packetType == "setPianoOnlineState") {
+    pianoConnected = message["data"];
+    if (message["data"]) {
+      heartBeat(0, 255, 30, PIANO_LED_START_INDEX, RGB_LED_NUM, 1);
+    } else {
+      reverseHeartBeat(255, 0, 30, PIANO_LED_START_INDEX, RGB_LED_NUM, 1);
+    }
+    setToBaseColor();
   }
 }
 
@@ -78,8 +86,9 @@ void setup() {
 
   FastLED.addLeds<CHIP_SET, signalPin, COLOR_CODE>(LEDs, RGB_LED_NUM);
   randomSeed(analogRead(0));
-  FastLED.setBrightness(BRIGHTNESS);
-  FastLED.setMaxPowerInVoltsAndMilliamps(5, 500);
+  FastLED.setBrightness(255);
+  FastLED.setMaxPowerInVoltsAndMilliamps(5, 9000);
+  //  FastLED.setMaxPowerInVoltsAndMilliamps(5, 500);
   FastLED.clear();
   FastLED.show();
 
@@ -135,7 +144,7 @@ void loop() {
   if (millis() - prevMillis > 60000 / 30 && curAlarmRed + curAlarmGreen + curAlarmBlue > 0)
   {
     prevMillis = millis();
-    heartBeat(curAlarmRed, curAlarmGreen, curAlarmBlue);
+    heartBeat(curAlarmRed, curAlarmGreen, curAlarmBlue, 0, RGB_LED_NUM, 5);
   }
 
   // IR-Sensor
@@ -169,44 +178,139 @@ void loop() {
 
 
 
-void heartBeat(byte r, byte g, byte b) {
-  //  int batchSize = 15;
-  //  float delaySize = _duration * batchSize / RGB_LED_NUM;
-  //  for (int i = 0; i < RGB_LED_NUM; i++) {
-  //    LEDs[i] = CRGB (0, 0, 0);
-  //  }
-  int batchSize = 5;
+
+
+//void heartBeat(byte r, byte g, byte b, int minLED, int maxLED, int batchSize) {
+//  float delaySize = 3;
+//  FastLED.show();
+//
+//  const int LEDCount = ceil(maxLED - minLED);
+//
+//  for (int t = 1; t < LEDCount / 2; t += batchSize)
+//  {
+//    float val = t * 2 * 255 / LEDCount;
+//    byte intensity = LLV(val);
+//    FastLED.setBrightness(intensity);
+//    for (int i = 0; i < t; i++)
+//    {
+//      LEDs[minLED + LEDCount / 2 - i] = CRGB (r, g, b);
+//      LEDs[minLED + LEDCount / 2 + i] = CRGB (r, g, b);
+//    }
+//    FastLED.show();
+//    FastLED.delay(delaySize);
+//  }
+//
+//  for (int t = 1; t < LEDCount / 2; t += batchSize)
+//  {
+//    float val = 255 - t * 2 * 255 / LEDCount;
+//    byte intensity = LLV(val);
+//    FastLED.setBrightness(intensity);
+//    for (int i = 0; i < t; i++)
+//    {
+//      LEDs[minLED + LEDCount / 2 - i] = CRGB (0, 0, 0);
+//      LEDs[minLED + LEDCount / 2 + i] = CRGB (0, 0, 0);
+//    }
+//    FastLED.show();
+//    FastLED.delay(delaySize);
+//  }
+//}
+
+void heartBeat(byte r, byte g, byte b, int minLED, int maxLED, int batchSize) {
   float delaySize = 3;
   FastLED.show();
 
-  for (int t = 1; t < RGB_LED_NUM / 2; t += batchSize)
+  const int LEDCount = ceil(maxLED - minLED);
+  const int halfLEDCount = ceil(LEDCount / 2);
+
+  for (int t = 0; t < halfLEDCount; t += batchSize)
   {
-    float val = t * 2 * 255 / RGB_LED_NUM;
+    float val = t * 2 * 255 / LEDCount;
     byte intensity = LLV(val);
-    FastLED.setBrightness(intensity);
+    int curR = ceil(r * intensity / 255);
+    int curG = ceil(g * intensity / 255);
+    int curB = ceil(b * intensity / 255);
     for (int i = 0; i < t; i++)
     {
-      LEDs[RGB_LED_NUM / 2 - i] = CRGB (r, g, b);
-      LEDs[RGB_LED_NUM / 2 + i] = CRGB (r, g, b);
+      LEDs[minLED + halfLEDCount - i] = CRGB (curR, curG, curB);
+      LEDs[minLED + halfLEDCount + i] = CRGB (curR, curG, curB);
     }
     FastLED.show();
     FastLED.delay(delaySize);
   }
 
-  for (int t = 1; t < RGB_LED_NUM / 2; t += batchSize)
+  for (int t = 0; t < ceil(LEDCount / 2); t += batchSize)
   {
-    float val = 255 - t * 2 * 255 / RGB_LED_NUM;
+    float val = 255 - t * 2 * 255 / LEDCount;
     byte intensity = LLV(val);
-    FastLED.setBrightness(intensity);
     for (int i = 0; i < t; i++)
     {
-      LEDs[RGB_LED_NUM / 2 - i] = CRGB (0, 0, 0);
-      LEDs[RGB_LED_NUM / 2 + i] = CRGB (0, 0, 0);
+      LEDs[minLED + halfLEDCount - i] = CRGB (0, 0, 0);
+      LEDs[minLED + halfLEDCount + i] = CRGB (0, 0, 0);
     }
+
+    for (int i = t; i < ceil(LEDCount / 2); i++)
+    {
+      int curR = ceil(r * intensity / 255);
+      int curG = ceil(g * intensity / 255);
+      int curB = ceil(b * intensity / 255);
+
+      LEDs[minLED + halfLEDCount - i] = CRGB (curR, curG, curB);
+      LEDs[minLED + halfLEDCount + i] = CRGB (curR, curG, curB);
+    }
+
     FastLED.show();
     FastLED.delay(delaySize);
   }
 }
+
+void reverseHeartBeat(byte r, byte g, byte b, int minLED, int maxLED, int batchSize) {
+  float delaySize = 3;
+  FastLED.show();
+
+  const int LEDCount = ceil(maxLED - minLED);
+  const int halfLEDCount = ceil(LEDCount / 2);
+
+  for (int t = 0; t < halfLEDCount; t += batchSize)
+  {
+    float val = t * 2 * 255 / LEDCount;
+    byte intensity = LLV(val);
+    int curR = ceil(r * intensity / 255);
+    int curG = ceil(g * intensity / 255);
+    int curB = ceil(b * intensity / 255);
+    for (int i = 0; i < t; i++)
+    {
+      LEDs[minLED + i] = CRGB (curR, curG, curB);
+      LEDs[maxLED - i] = CRGB (curR, curG, curB);
+    }
+    FastLED.show();
+    FastLED.delay(delaySize);
+  }
+
+  for (int t = 0; t < ceil(LEDCount / 2); t += batchSize)
+  {
+    float val = 255 - t * 2 * 255 / LEDCount;
+    byte intensity = LLV(val);
+    for (int i = 0; i < t; i++)
+    {
+      LEDs[minLED + i] = CRGB (0, 0, 0);
+      LEDs[maxLED - i] = CRGB (0, 0, 0);
+    }
+
+    for (int i = t; i < ceil(LEDCount / 2); i++)
+    {
+      int curR = ceil(r * intensity / 255);
+      int curG = ceil(g * intensity / 255);
+      int curB = ceil(b * intensity / 255);
+
+      LEDs[minLED + i] = CRGB (curR, curG, curB);
+      LEDs[maxLED - i] = CRGB (curR, curG, curB);
+    }
+
+    FastLED.show();
+    FastLED.delay(delaySize);
+  }
+}
+
 
 
 
@@ -270,7 +374,10 @@ void chargePhoneAnimation(int batPercentage) {
 
 void setToBaseColor() {
   FastLED.setBrightness(255);
-  for (int i = 0; i < RGB_LED_NUM; i++) {
+  int maxCount = RGB_LED_NUM;
+  if (pianoConnected) maxCount = PIANO_LED_START_INDEX;
+
+  for (int i = 0; i < maxCount; i++) {
     LEDs[i] = CRGB ( baseRed, baseGreen, baseBlue);
   }
   FastLED.show();
