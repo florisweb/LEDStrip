@@ -3,7 +3,7 @@
 #include <WiFiClientSecure.h>
 #include <WebSocketsClient.h>
 #include <ArduinoJson.h>
-#include "connectionManager.h";
+#include "connectionManager.h"
 
 WiFiMulti WiFiMulti;
 WebSocketsClient webSocket;
@@ -32,14 +32,14 @@ void sendDeviceInfo(String _requestId = "") {
   } else {
     dataString.concat("\"data\": {\"events\": ");
   }
-  
+
   dataString.concat(eventDocs);
   dataString.concat(", \"endPoints\": ");
   dataString.concat(accessPointDocs);
   dataString.concat(", \"connectionManagerVersion\":");
   dataString.concat(connectionManager::version);
   dataString.concat("}}");
-  
+
   Serial.println(dataString);
   webSocket.sendTXT(dataString);
 }
@@ -96,13 +96,16 @@ void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
           return;
         }
         onMessagePointer(doc);
-
       } else {
         DynamicJsonDocument doc(1024);
         deserializeJson(doc, payload);
-        String error = doc["error"];
+        String type = doc["type"];
         String responseContent = doc["response"];
-        if (responseContent == "{\"type\":\"auth\",\"data\":true}");
+
+        if (type == "curState")
+        {
+          onMessagePointer(doc);
+        } else if (responseContent == "{\"type\":\"auth\",\"data\":true}");
         {
           Serial.println("Successfully authenticated.");
           authenticated = true;

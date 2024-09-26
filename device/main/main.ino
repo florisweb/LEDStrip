@@ -1,5 +1,5 @@
 #include "FastLED.h"
-#include "connectionManager.h";
+#include "connectionManager.h"
 
 const int IRSensorPin = 18;
 const int signalPin = 5;
@@ -31,30 +31,15 @@ bool pianoConnected = false;
 connectionManager ConnectionManager;
 
 void onMessage(DynamicJsonDocument message) {
-  String error = message["error"];
   String packetType = message["type"];
+  String error = message["error"];
 
   Serial.print("[OnMessage] Error: ");
   Serial.println(error);
   Serial.print("[OnMessage] type: ");
   Serial.println(packetType);
 
-  if (packetType == "playChargePhoneAnimation")
-  {
-    return chargePhoneAnimation(message["data"]);
-  } else if (packetType == "startAlarmAnimation") {
-    curAlarmRed   = message["data"][0];
-    curAlarmGreen = message["data"][1];
-    curAlarmBlue  = message["data"][2];
-  } else if (packetType == "stopAlarm") {
-    curAlarmRed = curAlarmGreen = curAlarmBlue = 0;
-    setToBaseColor();
-  } else if (packetType == "setColor") {
-    baseRed   = message["data"][0];
-    baseGreen = message["data"][1];
-    baseBlue  = message["data"][2];
-    setToBaseColor();
-  } else if (packetType == "setLEDs") {
+  if (packetType == "setLEDs") {
     FastLED.setBrightness(255);
     JsonArray LEDDataJSON = message["data"];
 
@@ -69,6 +54,18 @@ void onMessage(DynamicJsonDocument message) {
       }
     }
     FastLED.show();
+  } else if (packetType == "playChargePhoneAnimation")
+  {
+    return chargePhoneAnimation(message["data"]);
+  } else if (packetType == "startAlarmAnimation") {
+    curAlarmRed   = message["data"][0];
+    curAlarmGreen = message["data"][1];
+    curAlarmBlue  = message["data"][2];
+  } else if (packetType == "stopAlarm") {
+    curAlarmRed = curAlarmGreen = curAlarmBlue = 0;
+    setToBaseColor();
+  } else if (packetType == "setBaseColor") {
+    setBaseColor(message["data"][0], message["data"][1], message["data"][2]);
   } else if (packetType == "setPianoOnlineState") {
     pianoConnected = message["data"];
     if (message["data"]) {
@@ -77,6 +74,8 @@ void onMessage(DynamicJsonDocument message) {
       reverseHeartBeat(255, 0, 30, PIANO_LED_START_INDEX, RGB_LED_NUM, 1);
     }
     setToBaseColor();
+  } else if (packetType == "curState") {
+    setBaseColor(message["data"]["baseColor"][0], message["data"]["baseColor"][1], message["data"]["baseColor"][2]);
   }
 }
 
@@ -88,7 +87,6 @@ void setup() {
   randomSeed(analogRead(0));
   FastLED.setBrightness(255);
   FastLED.setMaxPowerInVoltsAndMilliamps(5, 9000);
-  //  FastLED.setMaxPowerInVoltsAndMilliamps(5, 500);
   FastLED.clear();
   FastLED.show();
 
@@ -107,6 +105,10 @@ void setup() {
                                           "{"
                                           "\"type\": \"playChargePhoneAnimation\","
                                           "\"description\": \"Shows the charge-animation.\""
+                                          "},"
+                                          "{"
+                                          "\"type\": \"setPianoOnlineState\","
+                                          "\"description\": \"Sets the piano state and shows the corresponding animation.\""
                                           "},"
                                           "{"
                                           "\"type\": \"startAlarmAnimation\","
@@ -168,52 +170,14 @@ void loop() {
 
 
 
+void setBaseColor(int r, int g, int b) {
+  baseRed   = r;
+  baseGreen = g;
+  baseBlue  = b;
+  setToBaseColor();
+}
 
-
-
-
-
-
-
-
-
-
-
-
-//void heartBeat(byte r, byte g, byte b, int minLED, int maxLED, int batchSize) {
-//  float delaySize = 3;
-//  FastLED.show();
-//
-//  const int LEDCount = ceil(maxLED - minLED);
-//
-//  for (int t = 1; t < LEDCount / 2; t += batchSize)
-//  {
-//    float val = t * 2 * 255 / LEDCount;
-//    byte intensity = LLV(val);
-//    FastLED.setBrightness(intensity);
-//    for (int i = 0; i < t; i++)
-//    {
-//      LEDs[minLED + LEDCount / 2 - i] = CRGB (r, g, b);
-//      LEDs[minLED + LEDCount / 2 + i] = CRGB (r, g, b);
-//    }
-//    FastLED.show();
-//    FastLED.delay(delaySize);
-//  }
-//
-//  for (int t = 1; t < LEDCount / 2; t += batchSize)
-//  {
-//    float val = 255 - t * 2 * 255 / LEDCount;
-//    byte intensity = LLV(val);
-//    FastLED.setBrightness(intensity);
-//    for (int i = 0; i < t; i++)
-//    {
-//      LEDs[minLED + LEDCount / 2 - i] = CRGB (0, 0, 0);
-//      LEDs[minLED + LEDCount / 2 + i] = CRGB (0, 0, 0);
-//    }
-//    FastLED.show();
-//    FastLED.delay(delaySize);
-//  }
-//}
+// === LIGHT FUNCTION ===
 
 void heartBeat(byte r, byte g, byte b, int minLED, int maxLED, int batchSize) {
   float delaySize = 3;
@@ -310,13 +274,6 @@ void reverseHeartBeat(byte r, byte g, byte b, int minLED, int maxLED, int batchS
     FastLED.delay(delaySize);
   }
 }
-
-
-
-
-
-
-
 
 
 
