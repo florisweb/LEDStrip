@@ -24,7 +24,11 @@ byte baseRed = 0;
 byte baseGreen = 0;
 byte baseBlue = 0;
 
+enum Animations { NONE, RAIN };
+Animations curAnimation = NONE;
+
 bool pianoConnected = false;
+
 
 
 
@@ -76,6 +80,9 @@ void onMessage(DynamicJsonDocument message) {
     setToBaseColor();
   } else if (packetType == "curState") {
     setBaseColor(message["data"]["baseColor"][0], message["data"]["baseColor"][1], message["data"]["baseColor"][2]);
+  } else if (packetType == "playAnimation") {
+    if (curAnimation != NONE && static_cast<Animations>(message["data"]) == NONE) setToBaseColor();
+    curAnimation = static_cast<Animations>(message["data"]);
   }
 }
 
@@ -120,6 +127,11 @@ void setup() {
                                           "\"description\": \"Stops the animation from startAlarmAnimation.\""
                                           "},"
                                           "{"
+                                          "\"type\": \"playAnimation\","
+                                          "\"data\": \"Name of animation to play\","
+                                          "\"description\": \"Plays a hardcoded animation constantly.\""
+                                          "},"
+                                          "{"
                                           "\"type\": \"setColor\","
                                           "\"data\": \"[r, g, b]\","
                                           "\"description\": \"Sets the homogenious color of the LEDS.\""
@@ -130,8 +142,6 @@ void setup() {
                                           "\"description\": \"Allows for per LED color control.\""
                                           "}"
                                           "]");
-
-
   ConnectionManager.setup(ssid, password, deviceId, deviceKey, &onMessage);
 }
 
@@ -164,6 +174,12 @@ void loop() {
     }
   }
   curIRSensorState = IRSensorState;
+
+
+  switch (curAnimation)
+  {
+    case RAIN: animateRain(); break;
+  }
 }
 
 
@@ -178,6 +194,98 @@ void setBaseColor(int r, int g, int b) {
 }
 
 // === LIGHT FUNCTION ===
+//  for (int i = 0; i < maxDropletCount * 2; i++) droplets[i] = 0;
+
+
+const int maxDropletCount = 30;
+const int dropletDuration = 400;
+int droplets[maxDropletCount * 2];
+
+int prevRainMillis = millis();
+int calcDropletCount() {
+  int count = 0;
+  for (int i = 0; i < maxDropletCount; i++)
+  {
+    if (droplets[i * 2 + 1] != 0) count++;
+  }
+  return count;
+
+}
+
+void animateRain() {
+  int dropletCount = calcDropletCount();
+  if (dropletCount < maxDropletCount && random(0, 100) < (maxDropletCount - dropletCount) * 2) {
+    int dropletIndex = 0;
+    for (int i = 0; i < maxDropletCount; i++)
+    {
+      if (droplets[i * 2 + 1] == 0)
+      {
+        dropletIndex = i;
+        break;
+      }
+    }
+    int LEDIndex = random(0, PIANO_LED_START_INDEX);
+    droplets[dropletIndex * 2] = LEDIndex;
+    droplets[dropletIndex * 2 + 1] = dropletDuration;
+  }
+
+  int dt = millis() - prevRainMillis;
+  prevRainMillis = millis();
+
+  for (int i = 0; i < maxDropletCount; i++)
+  {
+    droplets[i * 2 + 1] -= dt;
+    if (droplets[i * 2 + 1] <= 0)
+    {
+      droplets[i * 2 + 1] = 0;
+    }
+  }
+
+
+  for (int i = 0; i < maxDropletCount; i++)
+  {
+    int durationLeft = round(droplets[i * 2 + 1] * 255 / dropletDuration);
+    LEDs[droplets[i * 2]] = CRGB (round(durationLeft * .1), round(durationLeft * .5), durationLeft);
+  }
+  FastLED.show();
+
+  if (random(0, 20000) < 1) animateLightning();
+}
+
+void animateLightning() {
+  int count = random(1, 3);
+  for (int i = 0; i < count; i++)
+  {
+    flashLightning(random(100, 200));
+    FastLED.delay(random(50, 100));
+  }
+}
+
+void flashLightning(int duration) {
+  int progress = 100;
+  while (progress > 0)
+  {
+    progress -= ceil(100 / (duration / 10));
+    for (int i = 0; i < PIANO_LED_START_INDEX; i++)
+    {
+      LEDs[i] = CRGB (round(progress * 100 / 100), round(progress * 220 / 100), round(progress * 255 / 100));
+    }
+    FastLED.show();
+    FastLED.delay(10);
+  }
+
+  for (int i = 0; i < PIANO_LED_START_INDEX; i++)
+  {
+    LEDs[i] = CRGB (0, 0, 0);
+  }
+  FastLED.show();
+}
+
+
+//void animateToColor()
+
+
+
 
 void heartBeat(byte r, byte g, byte b, int minLED, int maxLED, int batchSize) {
   float delaySize = 3;
