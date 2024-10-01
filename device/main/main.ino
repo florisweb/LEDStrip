@@ -70,6 +70,8 @@ void onMessage(DynamicJsonDocument message) {
     setToBaseColor();
   } else if (packetType == "setBaseColor") {
     setBaseColor(message["data"][0], message["data"][1], message["data"][2]);
+  } else if (packetType == "animateBaseColor") {
+    animateBaseColor(message["data"][0], message["data"][1], message["data"][2], message["data"][3]);
   } else if (packetType == "setPianoOnlineState") {
     pianoConnected = message["data"];
     if (message["data"]) {
@@ -128,13 +130,18 @@ void setup() {
                                           "},"
                                           "{"
                                           "\"type\": \"playAnimation\","
-                                          "\"data\": \"Name of animation to play\","
+                                          "\"data\": \"ENum int index of animation to play\","
                                           "\"description\": \"Plays a hardcoded animation constantly.\""
                                           "},"
                                           "{"
-                                          "\"type\": \"setColor\","
+                                          "\"type\": \"setBaseColor\","
                                           "\"data\": \"[r, g, b]\","
                                           "\"description\": \"Sets the homogenious color of the LEDS.\""
+                                          "},"
+                                          "{"
+                                          "\"type\": \"animateBaseColor\","
+                                          "\"data\": \"[r, g, b, duration]\","
+                                          "\"description\": \"Animates towards the new base color.\""
                                           "},"
                                           "{"
                                           "\"type\": \"setLEDs\","
@@ -193,9 +200,36 @@ void setBaseColor(int r, int g, int b) {
   setToBaseColor();
 }
 
-// === LIGHT FUNCTION ===
-//  for (int i = 0; i < maxDropletCount * 2; i++) droplets[i] = 0;
 
+
+void animateBaseColor(int r, int g, int b, int duration) {
+  int startRed = baseRed;
+  int startGreen = baseGreen;
+  int startBlue = baseBlue;
+  int progress = 100;
+  const int stepSize = 2;
+
+  int progressSteps = ceil(100 / (duration / stepSize));
+  if (progressSteps < 1) progressSteps = 1;
+
+  while (progress > 0)
+  {
+    progress -= progressSteps;
+    float perc = LLV((100 - progress) * 255 / 100) * 100 / 255;
+    
+    baseRed   = round(startRed * (100 - perc) / 100 +   r * perc / 100);
+    baseGreen = round(startGreen * (100 - perc) / 100 + g * perc / 100);
+    baseBlue  = round(startBlue * (100 - perc) / 100 +  b * perc / 100);
+    
+    setToBaseColor();
+    FastLED.delay(stepSize);
+  }
+  setBaseColor(r, g, b);
+}
+
+
+
+// === LIGHT FUNCTION ===
 
 const int maxDropletCount = 30;
 const int dropletDuration = 400;
@@ -270,6 +304,7 @@ void flashLightning(int duration) {
     {
       LEDs[i] = CRGB (round(progress * 100 / 100), round(progress * 220 / 100), round(progress * 255 / 100));
     }
+
     FastLED.show();
     FastLED.delay(10);
   }
@@ -281,8 +316,6 @@ void flashLightning(int duration) {
   FastLED.show();
 }
 
-
-//void animateToColor()
 
 
 
