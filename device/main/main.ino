@@ -54,7 +54,7 @@ void onMessage(DynamicJsonDocument message) {
       curIndex++;
       if (curIndex % 4 == 0)
       {
-        LEDs[curLEDData[0]] = CRGB (curLEDData[1], curLEDData[2], curLEDData[3]);
+        setLED(curLEDData[0], curLEDData[1], curLEDData[2], curLEDData[3]);
       }
     }
     FastLED.show();
@@ -201,28 +201,21 @@ void setBaseColor(int r, int g, int b) {
 }
 
 
-
 void animateBaseColor(int r, int g, int b, int duration) {
-  int startRed = baseRed;
-  int startGreen = baseGreen;
-  int startBlue = baseBlue;
-  int progress = 100;
-  const int stepSize = 2;
+  int startRed    = baseRed;
+  int startGreen  = baseGreen;
+  int startBlue   = baseBlue;
 
-  int progressSteps = ceil(100 / (duration / stepSize));
-  if (progressSteps < 1) progressSteps = 1;
-
-  while (progress > 0)
+  int startMillis = millis();
+  while (millis() - startMillis <= duration)
   {
-    progress -= progressSteps;
-    float perc = LLV((100 - progress) * 255 / 100) * 100 / 255;
-    
-    baseRed   = round(startRed * (100 - perc) / 100 +   r * perc / 100);
-    baseGreen = round(startGreen * (100 - perc) / 100 + g * perc / 100);
-    baseBlue  = round(startBlue * (100 - perc) / 100 +  b * perc / 100);
-    
+    float timePerc = (millis() - startMillis) * 100 / duration;
+    baseRed   = round(startRed * (100 - timePerc) / 100 +   r * timePerc / 100);
+    baseGreen = round(startGreen * (100 - timePerc) / 100 + g * timePerc / 100);
+    baseBlue  = round(startBlue * (100 - timePerc) / 100 +  b * timePerc / 100);
+
     setToBaseColor();
-    FastLED.delay(stepSize);
+    FastLED.delay(1);
   }
   setBaseColor(r, g, b);
 }
@@ -243,7 +236,6 @@ int calcDropletCount() {
     if (droplets[i * 2 + 1] != 0) count++;
   }
   return count;
-
 }
 
 void animateRain() {
@@ -279,7 +271,7 @@ void animateRain() {
   for (int i = 0; i < maxDropletCount; i++)
   {
     int durationLeft = round(droplets[i * 2 + 1] * 255 / dropletDuration);
-    LEDs[droplets[i * 2]] = CRGB (round(durationLeft * .1), round(durationLeft * .5), durationLeft);
+    setLED(droplets[i * 2], round(durationLeft * .1), round(durationLeft * .5), durationLeft);
   }
   FastLED.show();
 
@@ -475,10 +467,22 @@ void setToBaseColor() {
   int maxCount = RGB_LED_NUM;
   if (pianoConnected) maxCount = PIANO_LED_START_INDEX;
 
+  int trueRed = LLV(baseRed);
+  int trueGreen = LLV(baseGreen);
+  int trueBlue = LLV(baseBlue);
+
   for (int i = 0; i < maxCount; i++) {
-    LEDs[i] = CRGB ( baseRed, baseGreen, baseBlue);
+    LEDs[i] = CRGB(trueRed, trueGreen, trueBlue);
   }
   FastLED.show();
+}
+
+void setLED(int index, int r, int g, int b) {
+  int trueRed = LLV(r);
+  int trueGreen = LLV(g);
+  int trueBlue = LLV(b);
+
+  LEDs[index] = CRGB(r, g, b);
 }
 
 
