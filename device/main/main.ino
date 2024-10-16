@@ -1,9 +1,6 @@
 #include "FastLED.h"
 #include "connectionManager.h"
 
-const int IRSensorPin = 18;
-const int signalPin = 5;
-
 #define RGB_LED_NUM  300
 #define PIANO_LED_START_INDEX  222 // The index at which the strip is behind the piano
 #define CHIP_SET     WS2812B       // types of RGB LEDs
@@ -11,6 +8,20 @@ const int signalPin = 5;
 
 CRGB LEDs[RGB_LED_NUM];
 
+// Sensors
+const int IRSensorPin = 18;
+bool IRSensorState = false;
+
+const int LDRHistoryLength = 50;
+const int LDRInsidePin = 32;
+const int LDROutsidePin = 33;
+
+float LDRInsideRunningAverage = 0;
+float LDROutsideRunningAverage = 0;
+int insideLightLevel = 0;
+int outsideLightLevel = 0;
+
+const int signalPin = 5;
 
 
 
@@ -28,6 +39,9 @@ enum Animations { NONE, RAIN };
 Animations curAnimation = NONE;
 
 bool pianoConnected = false;
+
+
+
 
 
 
@@ -100,6 +114,8 @@ void setup() {
   FastLED.show();
 
   pinMode(IRSensorPin, INPUT);
+  pinMode(LDRInsidePin, INPUT);
+  pinMode(LDROutsidePin, INPUT);
 
   Serial.println("Setting up WiFi...");
 
@@ -108,6 +124,16 @@ void setup() {
                                     "\"type\": \"IRSensorEvent\","
                                     "\"data\": \"bool\","
                                     "\"description\": \"True on person detect, false on no-person detect\""
+                                    "},"
+                                    "{"
+                                    "\"type\": \"InsideLightLevelChangeEvent\","
+                                    "\"data\": \"int 0-10\","
+                                    "\"description\": \"Fired when the lightlevel changes. Light level from 0 (dark) to 10 (dim).\""
+                                    "},"
+                                    "{"
+                                    "\"type\": \"OutsideLightLevelChangeEvent\","
+                                    "\"data\": \"int 0-10\","
+                                    "\"description\": \"Fired when the lightlevel changes. Light level from 0 (dark) to 10 (dim).\""
                                     "}"
                                     "]");
   ConnectionManager.defineAccessPointDocs("["
@@ -154,9 +180,11 @@ void setup() {
 
 
 
+
 unsigned int prevMillis = 0;
-bool IRSensorState = false;
 bool curIRSensorState = false;
+int prevInsideLightLevel = 0;
+int prevOutsideLightLevel = 0;
 void loop() {
   ConnectionManager.loop();
 
@@ -166,7 +194,19 @@ void loop() {
     heartBeat(curAlarmRed, curAlarmGreen, curAlarmBlue, 0, RGB_LED_NUM, 5);
   }
 
-  // IR-Sensor
+
+  updateIRSensor();
+  updateLDRs();
+  delay(1);
+
+  switch (curAnimation)
+  {
+    case RAIN: animateRain(); break;
+  }
+}
+
+void updateIRSensor() {
+
   IRSensorState = digitalRead(IRSensorPin);
   if (IRSensorState != curIRSensorState)
   {
@@ -181,13 +221,36 @@ void loop() {
     }
   }
   curIRSensorState = IRSensorState;
-
-
-  switch (curAnimation)
-  {
-    case RAIN: animateRain(); break;
-  }
 }
+
+void updateLDRs() {
+  LDRInsideRunningAverage = LDRInsideRunningAverage * (LDRHistoryLength - 1) / LDRHistoryLength + analogRead(LDRInsidePin) / LDRHistoryLength;
+  LDROutsideRunningAverage = LDROutsideRunningAverage * (LDRHistoryLength - 1) / LDRHistoryLength + analogRead(LDROutsidePin) / LDRHistoryLength;
+  
+  insideLightLevel = LDRInsideRunningAverage / 410; // Scale it to a 0-10 range
+  outsideLightLevel = LDROutsideRunningAverage / 410; // Scale it to a 0-10 range
+
+  if (millis() % 1000 != 0) return;
+  if (insideLightLevel != prevInsideLightLevel)
+  {
+    String dataString = "{\"type\": \"InsideLightLevelChangeEvent\", \"data\": ";
+    dataString.concat(insideLightLevel);
+    dataString.concat("}");
+    ConnectionManager.send(dataString);
+  }
+  if (outsideLightLevel != prevOutsideLightLevel)
+  {
+    String dataString = "{\"type\": \"OutsideLightLevelChangeEvent\", \"data\": ";
+    dataString.concat(outsideLightLevel);
+    dataString.concat("}");
+    ConnectionManager.send(dataString);
+  }
+
+  prevInsideLightLevel = insideLightLevel;
+  prevOutsideLightLevel = outsideLightLevel;
+}
+
+
 
 
 
