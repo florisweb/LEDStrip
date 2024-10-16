@@ -197,7 +197,9 @@ void loop() {
 
   updateIRSensor();
   updateLDRs();
-  delay(1);
+
+  // Animations
+  updateBaseColorAnimation();
 
   switch (curAnimation)
   {
@@ -226,11 +228,11 @@ void updateIRSensor() {
 void updateLDRs() {
   LDRInsideRunningAverage = LDRInsideRunningAverage * (LDRHistoryLength - 1) / LDRHistoryLength + analogRead(LDRInsidePin) / LDRHistoryLength;
   LDROutsideRunningAverage = LDROutsideRunningAverage * (LDRHistoryLength - 1) / LDRHistoryLength + analogRead(LDROutsidePin) / LDRHistoryLength;
-  
+
   insideLightLevel = LDRInsideRunningAverage / 410; // Scale it to a 0-10 range
   outsideLightLevel = LDROutsideRunningAverage / 410; // Scale it to a 0-10 range
 
-  if (millis() % 1000 != 0) return;
+  if (millis() % 100 != 0) return;
   if (insideLightLevel != prevInsideLightLevel)
   {
     String dataString = "{\"type\": \"InsideLightLevelChangeEvent\", \"data\": ";
@@ -263,25 +265,66 @@ void setBaseColor(int r, int g, int b) {
   setToBaseColor();
 }
 
+unsigned int baseColorAnimationStart = millis();
+int baseColorAnimationDuration = 0;
+int animateBaseColorToR = 0;
+int animateBaseColorToG = 0;
+int animateBaseColorToB = 0;
+int animateBaseColorFromR = 0;
+int animateBaseColorFromG = 0;
+int animateBaseColorFromB = 0;
 
-void animateBaseColor(int r, int g, int b, int duration) {
-  int startRed    = baseRed;
-  int startGreen  = baseGreen;
-  int startBlue   = baseBlue;
-
-  int startMillis = millis();
-  while (millis() - startMillis <= duration)
+void updateBaseColorAnimation() {
+  if (baseColorAnimationDuration == 0) return;
+  if (millis() - baseColorAnimationStart >= baseColorAnimationDuration) // Finished animation
   {
-    float timePerc = (millis() - startMillis) * 100 / duration;
-    baseRed   = round(startRed * (100 - timePerc) / 100 +   r * timePerc / 100);
-    baseGreen = round(startGreen * (100 - timePerc) / 100 + g * timePerc / 100);
-    baseBlue  = round(startBlue * (100 - timePerc) / 100 +  b * timePerc / 100);
+    baseColorAnimationDuration = 0;
+    baseRed = animateBaseColorToR;
+    baseGreen = animateBaseColorToG;
+    baseBlue = animateBaseColorToB;
+    setToBaseColor();
+  } else {
+    float timePerc = (millis() - baseColorAnimationStart) * 100.0 / baseColorAnimationDuration;
+    Serial.println(timePerc);
+    baseRed   = round(animateBaseColorFromR * (100.0 - timePerc) / 100.0 + animateBaseColorToR * timePerc / 100.0);
+    baseGreen = round(animateBaseColorFromG * (100.0 - timePerc) / 100.0 + animateBaseColorToG * timePerc / 100.0);
+    baseBlue  = round(animateBaseColorFromB * (100.0 - timePerc) / 100.0 + animateBaseColorToB * timePerc / 100.0);
 
     setToBaseColor();
-    FastLED.delay(1);
   }
-  setBaseColor(r, g, b);
 }
+
+void animateBaseColor(int r, int g, int b, int duration) {
+  baseColorAnimationStart = millis();
+  baseColorAnimationDuration = duration;
+  animateBaseColorToR = r;
+  animateBaseColorToG = g;
+  animateBaseColorToB = b;
+
+  animateBaseColorFromR = baseRed;
+  animateBaseColorFromG = baseGreen;
+  animateBaseColorFromB = baseBlue;
+}
+
+//
+//void animateBaseColor(int r, int g, int b, int duration) {
+//  int startRed    = baseRed;
+//  int startGreen  = baseGreen;
+//  int startBlue   = baseBlue;
+//
+//  int startMillis = millis();
+//  while (millis() - startMillis <= duration)
+//  {
+//    float timePerc = (millis() - startMillis) * 100 / duration;
+//    baseRed   = round(startRed * (100 - timePerc) / 100 +   r * timePerc / 100);
+//    baseGreen = round(startGreen * (100 - timePerc) / 100 + g * timePerc / 100);
+//    baseBlue  = round(startBlue * (100 - timePerc) / 100 +  b * timePerc / 100);
+//
+//    setToBaseColor();
+//    FastLED.delay(1);
+//  }
+//  setBaseColor(r, g, b);
+//}
 
 
 
