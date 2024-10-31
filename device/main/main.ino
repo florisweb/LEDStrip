@@ -150,6 +150,11 @@ void setup() {
                                     "\"description\": \"True on person detect, false on no-person detect\""
                                     "},"
                                     "{"
+                                    "\"type\": \"PianoPlayStateChange\","
+                                    "\"data\": \"bool\","
+                                    "\"description\": \"True when the piano is being played (+ 3 min after), false otherwise.\""
+                                    "},"
+                                    "{"
                                     "\"type\": \"InsideLightLevelChangeEvent\","
                                     "\"data\": \"int 0-10\","
                                     "\"description\": \"Fired when the lightlevel changes. Light level from 0 (dark) to 10 (dim).\""
@@ -327,6 +332,11 @@ void setPianoConnectState(bool _connected) {
     reverseHeartBeat(255, 0, 30, PIANO_LED_START_INDEX - 2, RGB_LED_NUM + 1, 1);
   }
   setToBaseColor();
+
+  String dataString = "{\"type\": \"PianoPlayStateChange\", \"data\": ";
+  dataString.concat(pianoConnected);
+  dataString.concat("}");
+  ConnectionManager.send(dataString);  
 }
 
 
