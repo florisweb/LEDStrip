@@ -16,7 +16,7 @@ String jsonString;
 
 unsigned long lastHeartBeat = 0;
 void (*onMessagePointer)(DynamicJsonDocument message);
-
+void(* rebootESP) (void) = 0; // create a standard reset function
 
 
 String eventDocs = "[]";
@@ -45,18 +45,6 @@ void sendDeviceInfo(String _requestId = "") {
 }
 
 
-//void hexdump(const void *mem, uint32_t len, uint8_t cols = 16) {
-//  const uint8_t* src = (const uint8_t*) mem;
-//  Serial.printf("\n[HEXDUMP] Address: 0x%08X len: 0x%X (%d)", (ptrdiff_t)src, len, len);
-//  for (uint32_t i = 0; i < len; i++) {
-//    if (i % cols == 0) {
-//      Serial.printf("\n[0x%08X] 0x%08X: ", (ptrdiff_t)src, i);
-//    }
-//    Serial.printf("%02X ", *src);
-//    src++;
-//  }
-//  Serial.printf("\n");
-//}
 
 void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
   switch (type) {
@@ -185,6 +173,12 @@ void connectionManager::loop() {
   {
     Serial.println("Disconnected due to 2 missing heartbeats");
     webSocket.disconnect();
+  }
+
+  if (deltaHeartbeat > deviceRestartFrequency)
+  {
+    Serial.println("Restarting device due to lack of connection.");
+    rebootESP();
   }
 
 

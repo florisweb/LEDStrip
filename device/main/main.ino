@@ -2,11 +2,16 @@
 #include "connectionManager.h"
 
 #define RGB_LED_NUM  300
-#define PIANO_LED_START_INDEX  222 // The index at which the strip is behind the piano
+#define PIANO_LED_START_INDEX  223 // The index at which the strip is behind the piano
+#define PIANO_LED_NUM (RGB_LED_NUM - PIANO_LED_START_INDEX) // The index at which the strip is behind the piano
+
 #define CHIP_SET     WS2812B       // types of RGB LEDs
 #define COLOR_CODE   GRB           // sequence of colors in data stream
 
 CRGB LEDs[RGB_LED_NUM];
+
+
+
 
 // Sensors
 const int IRSensorPin = 18;
@@ -31,17 +36,25 @@ const String deviceId = "LEDStrip";
 const String deviceKey = "";
 
 byte curAlarmRed, curAlarmGreen, curAlarmBlue;
-byte baseRed = 0;
-byte baseGreen = 0;
-byte baseBlue = 0;
+float baseRed = 0;
+float baseGreen = 0;
+float baseBlue = 0;
 
 enum Animations { NONE, RAIN };
 Animations curAnimation = NONE;
 
+
+
+
+#define PIANO_KEY_NUM 87
+const float maxKeyDuration = 3000; // ms
+const int LEDSPerKey = 3;
+const int pianoSleepTimeout = 2 * 60 * 1000;
+unsigned int lastPianoEvent = 0;
 bool pianoConnected = false;
 
-
-
+int pianoKeyVelocities[PIANO_KEY_NUM];
+int pianoKeyDurations[PIANO_KEY_NUM];
 
 
 
@@ -72,6 +85,22 @@ void onMessage(DynamicJsonDocument message) {
       }
     }
     FastLED.show();
+  } else if (packetType == "setPianoKeys") {
+    if (!pianoConnected) setPianoConnectState(true);
+    lastPianoEvent = millis();
+    JsonArray LEDDataJSON = message["data"];
+
+    int curKeyData[3]; // Key-index, velocity, duration
+    int curIndex = 0;
+    for (JsonVariant v : LEDDataJSON) {
+      curKeyData[curIndex % 3] = v.as<int>();
+      curIndex++;
+      if (curIndex % 3 == 0)
+      {
+        pianoKeyVelocities[curKeyData[0]] = curKeyData[1];
+        pianoKeyDurations[curKeyData[0]] = curKeyData[2];
+      }
+    }
   } else if (packetType == "playChargePhoneAnimation")
   {
     return chargePhoneAnimation(message["data"]);
@@ -87,15 +116,10 @@ void onMessage(DynamicJsonDocument message) {
   } else if (packetType == "animateBaseColor") {
     animateBaseColor(message["data"][0], message["data"][1], message["data"][2], message["data"][3]);
   } else if (packetType == "setPianoOnlineState") {
-    pianoConnected = message["data"];
-    if (message["data"]) {
-      heartBeat(0, 255, 30, PIANO_LED_START_INDEX, RGB_LED_NUM, 1);
-    } else {
-      reverseHeartBeat(255, 0, 30, PIANO_LED_START_INDEX, RGB_LED_NUM, 1);
-    }
-    setToBaseColor();
+    setPianoConnectState(message["data"]);
   } else if (packetType == "curState") {
     setBaseColor(message["data"]["baseColor"][0], message["data"]["baseColor"][1], message["data"]["baseColor"][2]);
+    // Explicitly not setting the pianoConnectState as the LEDStrip can put it into 'sleep' mode itself
   } else if (packetType == "playAnimation") {
     if (curAnimation != NONE && static_cast<Animations>(message["data"]) == NONE) setToBaseColor();
     curAnimation = static_cast<Animations>(message["data"]);
@@ -173,6 +197,11 @@ void setup() {
                                           "\"type\": \"setLEDs\","
                                           "\"data\": \"[led-index 1, r1, g1, b1...]\","
                                           "\"description\": \"Allows for per LED color control.\""
+                                          "},"
+                                          "{"
+                                          "\"type\": \"setPianoKeys\","
+                                          "\"data\": \"[key-index 1, velocity, duration (ms) ...]\","
+                                          "\"description\": \"Animates/fades the respective keys with the correct color, determined by the velocity, over the provided duration.\""
                                           "}"
                                           "]");
   ConnectionManager.setup(ssid, password, deviceId, deviceKey, &onMessage);
@@ -198,8 +227,12 @@ void loop() {
   updateIRSensor();
   updateLDRs();
 
+
+  if (millis() - lastPianoEvent > pianoSleepTimeout && pianoConnected) setPianoConnectState(false);
+
   // Animations
   updateBaseColorAnimation();
+  updatePianoKeyLights();
 
   switch (curAnimation)
   {
@@ -207,8 +240,8 @@ void loop() {
   }
 }
 
-void updateIRSensor() {
 
+void updateIRSensor() {
   IRSensorState = digitalRead(IRSensorPin);
   if (IRSensorState != curIRSensorState)
   {
@@ -258,7 +291,56 @@ void updateLDRs() {
 
 
 
-void setBaseColor(int r, int g, int b) {
+
+
+
+
+// === PIANO-SECTION ===
+
+unsigned int prevPianoLightUpdate = millis();
+void updatePianoKeyLights() {
+  int dt = millis() - prevPianoLightUpdate;
+  prevPianoLightUpdate = millis();
+
+  for (int k = 0; k < PIANO_KEY_NUM; k++)
+  {
+    if (pianoKeyDurations[k] == 0) continue;
+    pianoKeyDurations[k] = max(0, pianoKeyDurations[k] - dt);
+
+    int curLEDIndex = floor(k * PIANO_LED_NUM / PIANO_KEY_NUM) + PIANO_LED_START_INDEX;
+    float perc = pianoKeyDurations[ k] / maxKeyDuration;
+    float intensity = min((2.0 / (2.0 - perc * 0.5) - 1.0) / 0.3, 1.0);
+
+    int r, g, b;
+    HSVtoRGB(max(min(pianoKeyVelocities[k] / 100.0, 1.0), 0.0) * 1.2, 1.0, intensity, r, g, b);
+    for (int i = 0; i < LEDSPerKey; i++) setLED(curLEDIndex + i, r, g, b);
+  }
+  FastLED.show();
+}
+
+void setPianoConnectState(bool _connected) {
+  pianoConnected = _connected;
+  lastPianoEvent = millis();
+  if (pianoConnected) {
+    heartBeat(0, 255, 30, PIANO_LED_START_INDEX - 2, RGB_LED_NUM + 1, 1);
+  } else {
+    reverseHeartBeat(255, 0, 30, PIANO_LED_START_INDEX - 2, RGB_LED_NUM + 1, 1);
+  }
+  setToBaseColor();
+}
+
+
+
+
+
+
+
+
+
+
+
+// === BASE COLOR ===
+void setBaseColor(float r, float g, float b) {
   baseRed   = r;
   baseGreen = g;
   baseBlue  = b;
@@ -267,12 +349,12 @@ void setBaseColor(int r, int g, int b) {
 
 unsigned int baseColorAnimationStart = millis();
 int baseColorAnimationDuration = 0;
-int animateBaseColorToR = 0;
-int animateBaseColorToG = 0;
-int animateBaseColorToB = 0;
-int animateBaseColorFromR = 0;
-int animateBaseColorFromG = 0;
-int animateBaseColorFromB = 0;
+float animateBaseColorToR = 0;
+float animateBaseColorToG = 0;
+float animateBaseColorToB = 0;
+float animateBaseColorFromR = 0;
+float animateBaseColorFromG = 0;
+float animateBaseColorFromB = 0;
 
 void updateBaseColorAnimation() {
   if (baseColorAnimationDuration == 0) return;
@@ -285,11 +367,10 @@ void updateBaseColorAnimation() {
     setToBaseColor();
   } else {
     float timePerc = (millis() - baseColorAnimationStart) * 100.0 / baseColorAnimationDuration;
-    Serial.println(timePerc);
-    baseRed   = round(animateBaseColorFromR * (100.0 - timePerc) / 100.0 + animateBaseColorToR * timePerc / 100.0);
-    baseGreen = round(animateBaseColorFromG * (100.0 - timePerc) / 100.0 + animateBaseColorToG * timePerc / 100.0);
-    baseBlue  = round(animateBaseColorFromB * (100.0 - timePerc) / 100.0 + animateBaseColorToB * timePerc / 100.0);
 
+    baseRed   = animateBaseColorFromR * (100.0 - timePerc) / 100.0 + animateBaseColorToR * timePerc / 100.0;
+    baseGreen = animateBaseColorFromG * (100.0 - timePerc) / 100.0 + animateBaseColorToG * timePerc / 100.0;
+    baseBlue  = animateBaseColorFromB * (100.0 - timePerc) / 100.0 + animateBaseColorToB * timePerc / 100.0;
     setToBaseColor();
   }
 }
@@ -305,27 +386,6 @@ void animateBaseColor(int r, int g, int b, int duration) {
   animateBaseColorFromG = baseGreen;
   animateBaseColorFromB = baseBlue;
 }
-
-//
-//void animateBaseColor(int r, int g, int b, int duration) {
-//  int startRed    = baseRed;
-//  int startGreen  = baseGreen;
-//  int startBlue   = baseBlue;
-//
-//  int startMillis = millis();
-//  while (millis() - startMillis <= duration)
-//  {
-//    float timePerc = (millis() - startMillis) * 100 / duration;
-//    baseRed   = round(startRed * (100 - timePerc) / 100 +   r * timePerc / 100);
-//    baseGreen = round(startGreen * (100 - timePerc) / 100 + g * timePerc / 100);
-//    baseBlue  = round(startBlue * (100 - timePerc) / 100 +  b * timePerc / 100);
-//
-//    setToBaseColor();
-//    FastLED.delay(1);
-//  }
-//  setBaseColor(r, g, b);
-//}
-
 
 
 // === LIGHT FUNCTION ===
@@ -571,7 +631,7 @@ void chargePhoneAnimation(int batPercentage) {
 void setToBaseColor() {
   FastLED.setBrightness(255);
   int maxCount = RGB_LED_NUM;
-  if (pianoConnected) maxCount = PIANO_LED_START_INDEX;
+  if (pianoConnected) maxCount = PIANO_LED_START_INDEX - 1;
 
   int trueRed = LLV(baseRed);
   int trueGreen = LLV(baseGreen);
@@ -594,8 +654,28 @@ void setLED(int index, int r, int g, int b) {
 
 
 
+
+
+// === UTILITIES ===
 float LLV(float val) { // Linearize Light Value
   int base = 100;
   float powPart = (pow(base, val / 255) - 1);
   return 255 / (1 - 1 / base) * 1 / base * powPart;
+}
+
+
+void HSVtoRGB(float h, float s, float v, int &r, int &g, int &b) {
+  int i = floor(h * 6);
+  float f = h * 6 - i;
+  float p = v * (1 - s);
+  float q = v * (1 - f * s);
+  float t = v * (1 - (1 - f) * s);
+  switch (i % 6) {
+    case 0: r = v * 255, g = t * 255, b = p * 255; break;
+    case 1: r = q * 255, g = v * 255, b = p * 255; break;
+    case 2: r = p * 255, g = v * 255, b = t * 255; break;
+    case 3: r = p * 255, g = q * 255, b = v * 255; break;
+    case 4: r = t * 255, g = p * 255, b = v * 255; break;
+    case 5: r = v * 255, g = p * 255, b = q * 255; break;
+  }
 }

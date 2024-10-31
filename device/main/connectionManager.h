@@ -6,7 +6,7 @@
 class connectionManager
 {    
   public:
-    constexpr static float version = 1.3;
+    constexpr static float version = 1.4;
     
     void setup(const char* _ssid, const char* _password, const String _deviceId, const String _deviceKey, void _onMessage(DynamicJsonDocument message));
     void loop();
@@ -19,6 +19,7 @@ class connectionManager
     String serverIP = "192.168.0.158";
     int serverPort = 8081;
     int heartbeatFrequency = 10000; // ms
+    int deviceRestartFrequency = 15 * 60 * 1000; // ms
 };
 
 #endif
